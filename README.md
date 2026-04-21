@@ -1,6 +1,6 @@
 # Towards Real-Time Musical Agents: Instrumental Accompaniment with Latent Diffusion Models and MAX/MSP
 
-This repository is the machine-learning and inference backend for AI Accompaniment.
+This repository is the machine-learning and inference backend for Ghost Note.
 
 It contains the training code, checkpoints, and OSC servers used by all current client surfaces:
 
