@@ -1,5 +1,18 @@
 # Towards Real-Time Musical Agents: Instrumental Accompaniment with Latent Diffusion Models and MAX/MSP
 
+This repository is the machine-learning and inference backend for AI Accompaniment.
+
+It contains the training code, checkpoints, and OSC servers used by all current client surfaces:
+
+- the browser app / web app in [../clients/web_ui](../clients/web_ui)
+- the JUCE standalone app and VST3 plugin in [../clients/juce_plugin](../clients/juce_plugin)
+- the reference Python client in [../clients/python_ref](../clients/python_ref)
+- the legacy MAX/MSP client in [../multi_track](../multi_track)
+
+If you are looking for the end-user application layer, this directory is not just a paper artifact and it is not only a MAX backend anymore. It is the shared serving and training core behind the browser workflow, the plugin workflow, and the legacy MAX workflow.
+
+The original paper framed the system as MAX/MSP plus a remote Python server. The current codebase is being migrated away from that MAX-only framing toward a multi-client runtime where the browser app and the JUCE client are the main forward paths.
+
 
 
 This repository contains the official PyTorch implementation accompanying the paper **"Towards Real-Time Musical Agents: Instrumental Accompaniment with Latent Diffusion Models and MAX/MSP"**.
@@ -14,7 +27,7 @@ This repository contains the official PyTorch implementation accompanying the pa
 
 ## Abstract
 
-We propose a framework for a real-time instrumental accompaniment and improvisation system. The project is twofold: we develop a diffusion-based generative model for musical accompaniment, and build a hybrid system that enables real-time interaction with this model by combining MAX/MSP with a remote Python server. Our latent diffusion model is trained with lookahead conditioning and deployed on a Python server. The MAX/MSP frontend handles real-time audio input, buffering, and playback, and communicates with the server via OSC messages. This setup enables a musician to plug in and play live within MAX/MSP, while the ML model listens and responds with complementary instrumental parts.
+We propose a framework for a real-time instrumental accompaniment and improvisation system. The project is twofold: we develop a diffusion-based generative model for musical accompaniment, and build a client-server runtime around it. The original deployment path combined MAX/MSP with a remote Python server; the current repository also exposes browser and JUCE clients on top of the same OSC backend. Our latent diffusion model is trained with lookahead conditioning and deployed on a Python server. That server listens to real-time or offline client input, runs accompaniment generation, and returns complementary instrumental parts.
 
 ---
 
@@ -23,7 +36,7 @@ We propose a framework for a real-time instrumental accompaniment and improvisat
   <img src="figures/Real_time_MAX.drawio.png" width="60%"/>
 </p>
 
-A human musician (e.g., drummer) performs live while a front-end computer running MAX/MSP captures the incoming audio stream and communicates with a remote GPU server via Open Sound Control (OSC). The server hosts a diffusion-based generative model that receives the audio input and generates accompaniment complementary instrument (e.g., bass) in real time. The generated audio is returned to the MAX/MSP environment and mixed with the human performance to produce the final musical output.
+A human musician or offline client sends audio to a remote or local Python server via Open Sound Control (OSC). In the original setup that front-end ran inside MAX/MSP; in the current workspace the same server is also driven by the browser app, the Python reference client, and the JUCE plugin / standalone app. The server hosts the accompaniment models and returns generated stems that are routed back to whichever client initiated the request.
 
 ### Real-Time Sliding-Window Protocol
 
