@@ -14,7 +14,7 @@ import datetime
 import numpy as np
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, Callback
 
 
 @rank_zero_only
@@ -206,7 +206,7 @@ def main():
         every_n_train_steps=None
     )
 
-    callbacks = [ckpt_callback]
+    callbacks: list[Callback] = [ckpt_callback]
 
     # # Init Model
     # diffusion_sigma_distribution = audio_diffusion_pytorch.LogNormalDistribution(**vars(cfg.diffusion_sigma_distribution))

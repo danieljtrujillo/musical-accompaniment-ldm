@@ -85,7 +85,7 @@ CAE               = EncoderDecoder(device=device)  # music2latent audio codec
 
 # Runtime parameters (can be updated via OSC at any time)
 steps        = 2
-config       = {}
+config: dict = {}
 package_size      = 5120   # floats per UDP chunk — tune from Max with /update_package_size
 r        = 0.25   # fraction of the window to inpaint
 w        = 1.0    # prediction window multiplier
@@ -239,7 +239,10 @@ def load_network(unused_addr):
     global _loading
     _loading = True
 
-    config = yaml.load(open(filename, 'r'), Loader=yaml.FullLoader)
+    with open(filename, 'r') as _f:
+        _loaded_cfg = yaml.load(_f, Loader=yaml.FullLoader)
+    assert isinstance(_loaded_cfg, dict), f"config {filename} did not load to a dict"
+    config = _loaded_cfg
     cfg    = dict2namespace(config)
 
     # Instantiate CTM model wrapper
@@ -271,6 +274,7 @@ def load_network(unused_addr):
 
     _loading = False
     print("Model ready!\n")
+    _send_osc("/ready", True)  # notify client that checkpoint is loaded and /context may be streamed
 
 
 # =============================================================================
@@ -412,15 +416,19 @@ def predict(*args):
             # Fade-in at the start of the send window to reduce boundary clicks
             flatten_prediction[:headroom_samples] *= fade_in_window
 
-            # Keep generated_audio in sync for debug export
-            buf_start = total_length - n_needed
-            generated_audio[:, buf_start:buf_start + n_needed] = torch.tensor(flatten_prediction)
+            # Keep generated_audio in sync for debug export.
+            # The decoded tensor may be shorter than `n_needed` when
+            # `expected_len` rounds down; use its actual length as the write
+            # extent so the assignment doesn't throw on shape mismatch.
+            pred_len  = flatten_prediction.shape[0]
+            buf_start = total_length - pred_len
+            generated_audio[:, buf_start:buf_start + pred_len] = torch.tensor(flatten_prediction)
 
             # Stream chunks — each packet carries chunk_idx + total_chunks for reassembly
-            chunk_starts = list(range(0, n_needed, package_size))
+            chunk_starts = list(range(0, pred_len, package_size))
             total_chunks = len(chunk_starts)
             for chunk_idx, j in enumerate(chunk_starts):
-                chunk = flatten_prediction[j : j + min(package_size, n_needed - j)]
+                chunk = flatten_prediction[j : j + min(package_size, pred_len - j)]
                 sock_out.sendto(
                     _make_osc_dgram("/" + stem_name, response_batch_id, chunk_idx, total_chunks, chunk),
                     _dest)
@@ -472,8 +480,8 @@ for _ in range(_NUM_QUEUE_WORKERS):
 # Watchdog + auto-trigger state
 # =============================================================================
 
-_first_chunk_time     = None
-_last_chunk_time      = None
+_first_chunk_time: float = 0.0
+_last_chunk_time: float  = 0.0
 _chunk_count          = 0
 _auto_lock            = Lock()
 _auto_chunks_received = 0
@@ -597,12 +605,26 @@ def handle_predict_instruments(address, *args):
 
 
 def reset_tensor(unused_addr, *args):
-    """OSC /reset — zero out mixture buffer, stored latent, and generated audio (full restart)."""
+    """OSC /reset — zero out mixture buffer, stored latent, and generated audio (full restart).
+
+    Also clears the batch-tracking state so a reconnecting client that
+    restarts its batch_id counter is not mistaken for a duplicate of the
+    previous session's final batch.
+    """
     global context_audio, context_latent, generated_latent, generated_audio
+    global _current_batch_id, _batch_triggered, _auto_chunks_received, _auto_chunks_expected, _watchdog_timer
     context_audio.fill_(0.0)
     context_latent.fill_(0.0)
     generated_audio.fill_(0.0)
     generated_latent = CAE.encode(generated_audio).unsqueeze(1)
+    with _auto_lock:
+        _current_batch_id     = -1
+        _batch_triggered      = False
+        _auto_chunks_received = 0
+        _auto_chunks_expected = 0
+        if _watchdog_timer is not None:
+            _watchdog_timer.cancel()
+            _watchdog_timer = None
     print("Reset: context_audio, context_latent, generated_latent, and generated_audio zeroed.")
 
 
